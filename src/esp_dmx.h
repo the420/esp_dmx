@@ -7,18 +7,17 @@
  */
 #pragma once
 
-#include "dmx/bus_ctl.h"
-#include "dmx/device.h"
-#include "dmx/driver.h"
-#include "dmx/types.h"
-#include "rdm/types.h"
+#include "dmx/include/device.h"
+#include "dmx/include/driver.h"
+#include "dmx/include/types.h"
+#include "rdm/include/types.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /** @brief The major version number of this library. (X.x.x)*/
-#define ESP_DMX_VERSION_MAJOR 3
+#define ESP_DMX_VERSION_MAJOR 4
 
 /** @brief The minor version number of this library. (x.X.x)*/
 #define ESP_DMX_VERSION_MINOR 1
@@ -32,42 +31,32 @@ extern "C" {
    ESP_DMX_VERSION_PATCH)
 
 /** @brief The version of this library expressed as a string value.*/
-#define ESP_DMX_VERSION_LABEL                                 \
-  "esp_dmx v" __XSTRING(ESP_DMX_VERSION_MAJOR) "." __XSTRING( \
-      ESP_DMX_VERSION_MINOR) "." __XSTRING(ESP_DMX_VERSION_PATCH)
+#define ESP_DMX_VERSION_LABEL                         \
+  __XSTRING(ESP_DMX_VERSION_MAJOR)                    \
+  "." __XSTRING(ESP_DMX_VERSION_MINOR) "." __XSTRING( \
+      ESP_DMX_VERSION_PATCH) " " __DATE__
 
-/** @brief The default configuration for the DMX driver. Passing this
- * configuration to dmx_driver_install() installs the driver with one DMX
- * personality which has a footprint of one DMX address. The DMX address will
- * automatically be searched for in NVS and set to 1 if not found or if NVS is
- * disabled. */
-#define DMX_CONFIG_DEFAULT                                     \
-  ((dmx_config_t){                                             \
-      255,                          /*pd_size*/                \
-      0,                            /*model_id*/               \
-      RDM_PRODUCT_CATEGORY_FIXTURE, /*product_category*/       \
-      ESP_DMX_VERSION_ID,           /*software_version_id*/    \
-      ESP_DMX_VERSION_LABEL,        /*software_version_label*/ \
-      "Default Device",             /*device_label*/           \
-      1,                            /*current_personality*/    \
-      {{1, "Default Personality"}}, /*personalities*/          \
-      1,                            /*personality_count*/      \
-      0,                            /*dmx_start_address*/      \
-  })
-
-#ifdef DMX_ISR_IN_IRAM
-/** @brief The default interrupt flags for the DMX sniffer. Places the
- * interrupts in IRAM.*/
-#define DMX_SNIFFER_INTR_FLAGS_DEFAULT (ESP_INTR_FLAG_EDGE | ESP_INTR_FLAG_IRAM)
+#if defined(CONFIG_DMX_ISR_IN_IRAM) || ESP_IDF_VERSION_MAJOR < 5
 /** @brief The default interrupt flags for the DMX driver. Places the
  * interrupts in IRAM.*/
 #define DMX_INTR_FLAGS_DEFAULT (ESP_INTR_FLAG_IRAM)
 #else
-/** @brief The default interrupt flags for the DMX sniffer.*/
-#define DMX_SNIFFER_INTR_FLAGS_DEFAULT (ESP_INTR_FLAG_EDGE)
 /** @brief The default interrupt flags for the DMX driver.*/
 #define DMX_INTR_FLAGS_DEFAULT (0)
 #endif
+
+/** @brief The default configuration for the DMX driver.*/
+#define DMX_CONFIG_DEFAULT                                            \
+  (dmx_config_t) {                                                    \
+    DMX_INTR_FLAGS_DEFAULT,           /*interrupt_flags*/             \
+        32,                           /*root_device_parameter_count*/ \
+        0,                            /*sub_device_parameter_count*/  \
+        0,                            /*model_id*/                    \
+        RDM_PRODUCT_CATEGORY_FIXTURE, /*product_category*/            \
+        ESP_DMX_VERSION_ID,           /*software_version_id*/         \
+        ESP_DMX_VERSION_LABEL,        /*software_version_label*/      \
+        32,                           /*queue_size_max*/              \
+  }
 
 #ifdef __cplusplus
 }
