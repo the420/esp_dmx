@@ -1,6 +1,6 @@
-#include "nvs.h"
+#include "include/nvs.h"
 
-#include "dmx/struct.h"
+#include "dmx/include/service.h"
 #include "esp_dmx.h"
 #include "nvs_flash.h"
 
@@ -10,28 +10,39 @@
 #define DMX_NVS_PARTITION_NAME CONFIG_DMX_NVS_PARTITION_NAME
 #endif
 
+#define DMX_NVS_KEY_SIZE_MAX (16)
+
+static const char *dmx_nvs_namespace = "esp_dmx";
+
+static void dmx_nvs_get_key(char *key, dmx_port_t dmx_num,
+                            rdm_sub_device_t sub_device, rdm_pid_t pid) {
+  const int w =
+      snprintf(key, DMX_NVS_KEY_SIZE_MAX, "%x%x%x%x%x", ESP_DMX_VERSION_MAJOR,
+               ESP_DMX_VERSION_MINOR, dmx_num, sub_device, pid);
+  assert(w < DMX_NVS_KEY_SIZE_MAX);
+}
+
 void dmx_nvs_init(dmx_port_t dmx_num) {
   nvs_flash_init_partition(DMX_NVS_PARTITION_NAME);
 }
 
-bool dmx_nvs_get(dmx_port_t dmx_num, rdm_pid_t pid, rdm_ds_t ds, void *param,
-                 size_t *size) {
+size_t dmx_nvs_get(dmx_port_t dmx_num, rdm_sub_device_t sub_device,
+                   rdm_pid_t pid, void *param, size_t size) {
   assert(dmx_num < DMX_NUM_MAX);
+  assert(pid > 0);
+  assert(sub_device < RDM_SUB_DEVICE_MAX);
   assert(param != NULL);
-  assert(size != NULL);
 
-  if (*size == 0) {
-    return true;
+  if (size == 0) {
+    return size;
   }
 
-  // Get the NVS namespace and key value
-  char namespace[] = "esp_dmx?";
-  namespace[sizeof(namespace) - 2] = dmx_num + '0';
-  char key[5];
-  itoa((uint16_t)pid, key, 16);
+  // Get the NVS key
+  char key[DMX_NVS_KEY_SIZE_MAX];
+  dmx_nvs_get_key(key, dmx_num, sub_device, pid);
 
   nvs_handle_t nvs;
-  esp_err_t err = nvs_open(namespace, NVS_READONLY, &nvs);
+  esp_err_t err = nvs_open(dmx_nvs_namespace, NVS_READONLY, &nvs);
   if (!err) {
 #ifndef DMX_ISR_IN_IRAM
     // Track which drivers are currently enabled and disable those which are
@@ -45,30 +56,21 @@ bool dmx_nvs_get(dmx_port_t dmx_num, rdm_pid_t pid, rdm_ds_t ds, void *param,
 #endif
 
     // Read the parameter from NVS depending on its type
-    switch (ds) {
-      case RDM_DS_ASCII:
-        err = nvs_get_str(nvs, key, param, size);
-        break;
-      case RDM_DS_UNSIGNED_BYTE:
+    switch (size) {
+      case sizeof(uint8_t):
         err = nvs_get_u8(nvs, key, param);
+        size = sizeof(uint8_t);
         break;
-      case RDM_DS_SIGNED_BYTE:
-        err = nvs_get_i8(nvs, key, param);
-        break;
-      case RDM_DS_UNSIGNED_WORD:
+      case sizeof(uint16_t):
         err = nvs_get_u16(nvs, key, param);
+        size = sizeof(uint16_t);
         break;
-      case RDM_DS_SIGNED_WORD:
-        err = nvs_get_i16(nvs, key, param);
-        break;
-      case RDM_DS_UNSIGNED_DWORD:
+      case sizeof(uint32_t):
         err = nvs_get_u32(nvs, key, param);
-        break;
-      case RDM_DS_SIGNED_DWORD:
-        err = nvs_get_i32(nvs, key, param);
+        size = sizeof(uint32_t);
         break;
       default:
-        err = nvs_get_blob(nvs, key, param, size);
+        err = nvs_get_blob(nvs, key, param, &size);
     }
 
 #ifndef DMX_ISR_IN_IRAM
@@ -82,26 +84,30 @@ bool dmx_nvs_get(dmx_port_t dmx_num, rdm_pid_t pid, rdm_ds_t ds, void *param,
     nvs_close(nvs);
   }
 
-  return (err == ESP_OK);
+  if (err) {
+    size = 0;
+  }
+
+  return size;
 }
 
-bool dmx_nvs_set(dmx_port_t dmx_num, rdm_pid_t pid, rdm_ds_t ds,
+bool dmx_nvs_set(dmx_port_t dmx_num, rdm_sub_device_t sub_device, rdm_pid_t pid,
                  const void *param, size_t size) {
   assert(dmx_num < DMX_NUM_MAX);
+  assert(pid > 0);
+  assert(sub_device < 513);
   assert(param != NULL);
 
   if (size == 0) {
     return true;
   }
 
-  // Get the NVS namespace and key value
-  char namespace[] = "esp_dmx?";
-  namespace[sizeof(namespace) - 2] = dmx_num + '0';
-  char key[5];
-  itoa((uint16_t)pid, key, 16);
+  // Get the NVS key
+  char key[DMX_NVS_KEY_SIZE_MAX];
+  dmx_nvs_get_key(key, dmx_num, sub_device, pid);
 
   nvs_handle_t nvs;
-  esp_err_t err = nvs_open(namespace, NVS_READWRITE, &nvs);
+  esp_err_t err = nvs_open(dmx_nvs_namespace, NVS_READWRITE, &nvs);
   if (!err) {
 #ifndef DMX_ISR_IN_IRAM
     // Track which drivers are currently enabled and disable those which are
@@ -115,27 +121,15 @@ bool dmx_nvs_set(dmx_port_t dmx_num, rdm_pid_t pid, rdm_ds_t ds,
 #endif
 
     // Write the parameter to NVS depending on its type
-    switch (ds) {
-      case RDM_DS_ASCII:
-        err = nvs_set_str(nvs, key, param);
-        break;
-      case RDM_DS_UNSIGNED_BYTE:
+    switch (size) {
+      case sizeof(uint8_t):
         err = nvs_set_u8(nvs, key, *(uint8_t *)param);
         break;
-      case RDM_DS_SIGNED_BYTE:
-        err = nvs_set_i8(nvs, key, *(int8_t *)param);
-        break;
-      case RDM_DS_UNSIGNED_WORD:
+      case sizeof(uint16_t):
         err = nvs_set_u16(nvs, key, *(uint16_t *)param);
         break;
-      case RDM_DS_SIGNED_WORD:
-        err = nvs_set_i16(nvs, key, *(int16_t *)param);
-        break;
-      case RDM_DS_UNSIGNED_DWORD:
+      case sizeof(uint32_t):
         err = nvs_set_u32(nvs, key, *(uint32_t *)param);
-        break;
-      case RDM_DS_SIGNED_DWORD:
-        err = nvs_set_i32(nvs, key, *(int32_t *)param);
         break;
       default:
         err = nvs_set_blob(nvs, key, param, size);
