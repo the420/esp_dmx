@@ -6,174 +6,51 @@
  */
 #pragma once
 
-#include <stdint.h>
+#include <stdbool.h>
 
-#include "dmx/types.h"
-#include "rdm/parameters.h"
-#include "rdm/types.h"
+#include "dmx/include/types.h"
+#include "rdm/include/types.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /**
- * @brief The function type for user callbacks in RDM responses.
- */
-typedef void (*rdm_responder_cb_t)(dmx_port_t dmx_num,
-                                   const rdm_header_t *header, void *context);
-
-/**
- * @brief Registers the default response to RDM_PID_DISC_UNIQUE_BRANCH requests.
- * This response is required by all RDM-capable devices. It is called when the
- * DMX driver is initially installed.
- *
- * @param dmx_num The DMX port number.
- * @param cb A callback which is called upon receiving a request for this PID.
- * @param[inout] context A pointer to context which is used in the user
- * callback.
- * @return true if the PID response was registered.
- * @return false if there is not enough memory to register additional responses.
- */
-bool rdm_register_disc_unique_branch(dmx_port_t dmx_num, rdm_responder_cb_t cb,
-                                     void *context);
-
-/**
- * @brief Registers the default response to RDM_PID_DISC_MUTE requests. This
- * response is required by all RDM-capable devices. It is called when the DMX
- * driver is initially installed.
- *
- * @param dmx_num The DMX port number.
- * @param cb A callback which is called upon receiving a request for this PID.
- * @param[inout] context A pointer to context which is used in the user
- * callback.
- * @return true if the PID response was registered.
- * @return false if there is not enough memory to register additional responses.
- */
-bool rdm_register_disc_mute(dmx_port_t dmx_num, rdm_responder_cb_t cb,
-                            void *context);
-
-/**
- * @brief Registers the default response to RDM_PID_DISC_UN_MUTE requests. This
- * response is required by all RDM-capable devices. It is called when the DMX
- * driver is initially installed.
- *
- * @param dmx_num The DMX port number.
- * @param cb A callback which is called upon receiving a request for this PID.
- * @param[inout] context A pointer to context which is used in the user
- * callback.
- * @return true if the PID response was registered.
- * @return false if there is not enough memory to register additional responses.
- */
-bool rdm_register_disc_un_mute(dmx_port_t dmx_num, rdm_responder_cb_t cb,
-                               void *context);
-
-/**
- * @brief Registers the default response to RDM_PID_DEVICE_INFO requests. This
- * response is required by all RDM-capable devices. It is called when the DMX
- * driver is initially installed.
- *
- * @param dmx_num The DMX port number.
- * @param[inout] device_info A pointer to the device info parameter to use in
- * RDM responses.  This value is used to set the parameter to a default value
- * when this function is called for the first time and is ignored (and therefore
- * may be set to NULL) on subsequent calls.
- * @param cb A callback which is called upon receiving a request for this PID.
- * @param[inout] context A pointer to context which is used in the user
- * callback.
- * @return true if the PID response was registered.
- * @return false if there is not enough memory to register additional responses.
- */
-bool rdm_register_device_info(dmx_port_t dmx_num,
-                              rdm_device_info_t *device_info,
-                              rdm_responder_cb_t cb, void *context);
-
-/**
- * @brief Registers the default response to RDM_PID_SOFTWARE_VERSION_LABEL
- * requests. This response is required by all RDM-capable devices. It is called
- * when the DMX driver is initially installed.
- *
- * @param dmx_num The DMX port number.
- * @param[in] software_version_label A pointer to a null-terminated software
- * version label string to use in RDM responses. This value is used to set the
- * parameter to a default value when this function is called for the first time
- * and is ignored (and therefore may be set to NULL) on subsequent calls.
- * @param cb A callback which is called upon receiving a request for this PID.
- * @param[inout] context A pointer to context which is used in the user
- * callback.
- * @return true if the PID response was registered.
- * @return false if there is not enough memory to register additional responses.
- */
-bool rdm_register_software_version_label(dmx_port_t dmx_num,
-                                         const char *software_version_label,
-                                         rdm_responder_cb_t cb, void *context);
-
-/**
- * @brief Registers the default response to RDM_PID_DEVICE_LABEL requests.
- * It is called when the DMX driver is initially installed.
+ * @brief The function type used for callbacks after receiving an RDM request
+ * and sending a response.
  * 
- * @param dmx_num The DMX port number.
- * @param device_label A pointer to a null-terminated device label string 
- * to use in RDM responses. This value is used to set the
- * parameter to a default value when this function is called for the first time
- * and is ignored (and therefore may be set to NULL) on subsequent calls.
- * @param cb A callback which is called upon receiving a request for this PID.
- * @param[inout] context A pointer to context which is used in the user
- * callback.
- * @return true if the PID response was registered.
- * @return false if there is not enough memory to register additional responses.
-*/
-bool rdm_register_device_label(dmx_port_t dmx_num,
-                               const char *device_label,
-                               rdm_responder_cb_t cb, void *context);
+ * @param dmx_num The DMX port number of the request.
+ * @param[in] request_header The header of the RDM request.
+ * @param[in] response_header The header of the RDM response.
+ * @param[inout] context The user context provided to the function.
+ */
+typedef void (*rdm_callback_t)(dmx_port_t dmx_num, rdm_header_t *request_header,
+                               rdm_header_t *response_header, void *context);
 
 /**
- * @brief Registers the default response to RDM_PID_IDENTIFY_DEVICE requests.
- * This response is required by all RDM-capable devices. It is called when the
- * DMX driver is initially installed.
+ * @brief Sends an RDM response based on the most recently received RDM request
+ * that was received. In order to send a response to an RDM request the RDM
+ * request must still be in the DMX driver buffer and the request must be a
+ * valid RDM packet that targets this device. This function also calls RDM
+ * response callback functions. A response packet may not be sent if the request
+ * was a broadcast packet or if the request was a discovery packet and this
+ * device is muted. Regardless of whether a response is sent, if there is a
+ * callback registered for the RDM request PID, the callback will be handled.
  *
  * @param dmx_num The DMX port number.
- * @param cb A callback which is called upon receiving a request for this PID.
- * @param[inout] context A pointer to context which is used in the user
- * callback.
- * @return true if the PID response was registered.
- * @return false if there is not enough memory to register additional responses.
+ * @return true if a response packet was sent.
+ * @return false if a response packet was not sent.
  */
-bool rdm_register_identify_device(dmx_port_t dmx_num, rdm_responder_cb_t cb,
-                                  void *context);
-
-bool rdm_register_dmx_personality(dmx_port_t dmx_num, rdm_responder_cb_t cb,
-                                  void *context);
-
-bool rdm_register_dmx_personality_description(dmx_port_t dmx_num, rdm_responder_cb_t cb,
-                                  void *context);
-
-bool rdm_register_supported_parameters(dmx_port_t dmx_num, rdm_responder_cb_t cb,
-                                  void *context);
-
-bool rdm_register_parameter_description(dmx_port_t dmx_num, rdm_responder_cb_t cb,
-                                        void *context);
-
-// TODO: docs
-bool rdm_register_manufacturer_specific_simple(
-    dmx_port_t dmx_num, rdm_pid_description_t desc, void *param,
-    const char *param_str, rdm_responder_cb_t cb, void *context, bool nvs);
-
-/**
- * @brief Registers the default response to RDM_PID_DMX_START_ADDRESS requests.
- * This response is required by all RDM-capable devices which use a DMX address.
- * It is called when the DMX driver is initially installed if the DMX start
- * address is not set to DMX_START_ADDRESS_NONE.
- *
- * @param dmx_num The DMX port number.
- * @param cb A callback which is called upon receiving a request for this PID.
- * @param[inout] context A pointer to context which is used in the user
- * callback.
- * @return true if the PID response was registered.
- * @return false if there is not enough memory to register additional responses.
- */
-bool rdm_register_dmx_start_address(dmx_port_t dmx_num, rdm_responder_cb_t cb,
-                                    void *context);
+bool rdm_send_response(dmx_port_t dmx_num);
 
 #ifdef __cplusplus
 }
 #endif
+
+#include "rdm/responder/include/device_control.h"
+#include "rdm/responder/include/discovery.h"
+#include "rdm/responder/include/dmx_setup.h"
+#include "rdm/responder/include/product_info.h"
+#include "rdm/responder/include/queue_status.h"
+#include "rdm/responder/include/rdm_info.h"
+#include "rdm/responder/include/sensor_parameter.h"
