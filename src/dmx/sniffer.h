@@ -6,10 +6,19 @@
  */
 #pragma once
 
-#include "dmx/types.h"
+#include "dmx/include/types.h"
 
 #ifdef __cplusplus
 extern "C" {
+#endif
+
+#if defined(CONFIG_DMX_ISR_IN_IRAM) || ESP_IDF_VERSION_MAJOR < 5
+/** @brief The default interrupt flags for the DMX sniffer. Places the
+ * interrupts in IRAM.*/
+#define DMX_SNIFFER_INTR_FLAGS_DEFAULT (ESP_INTR_FLAG_EDGE | ESP_INTR_FLAG_IRAM)
+#else
+/** @brief The default interrupt flags for the DMX sniffer.*/
+#define DMX_SNIFFER_INTR_FLAGS_DEFAULT (ESP_INTR_FLAG_EDGE)
 #endif
 
 /**
@@ -52,17 +61,15 @@ bool dmx_sniffer_disable(dmx_port_t dmx_num);
 bool dmx_sniffer_is_enabled(dmx_port_t dmx_num);
 
 /**
- * @brief Gets sniffer data if it is available.
+ * @brief Gets sniffer data.
  *
  * @param dmx_num The DMX port number.
  * @param[out] metadata A pointer to a dmx_metadata_t struct into which to
  * copy DMX sniffer data.
- * @param wait_ticks The number of ticks to wait before this function times out.
  * @return true if data was copied.
  * @return false if data was not copied.
  */
-bool dmx_sniffer_get_data(dmx_port_t dmx_num, dmx_metadata_t *metadata,
-                          TickType_t wait_ticks);
+bool dmx_sniffer_get_data(dmx_port_t dmx_num, dmx_metadata_t *metadata);
 
 #ifdef __cplusplus
 }
